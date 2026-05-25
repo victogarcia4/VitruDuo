@@ -200,8 +200,14 @@ const curriculum = WORLD_DEFS.map(([id, title, short, accent, icon, lessons]) =>
   lessons: lessons.map((item) => makeLesson(id, item))
 }));
 
+const STATE_KEY = "notebookQuestState.v2";
+localStorage.removeItem("notebookMentorState");
+localStorage.removeItem("notebookQuestState");
+
 const totalLessons = curriculum.reduce((sum, unit) => sum + unit.lessons.length, 0);
 const initialState = {
+  authed: false,
+  user: null,
   onboarded: false,
   role: "",
   goal: "",
@@ -211,6 +217,7 @@ const initialState = {
   gems: 80,
   streak: 0,
   muted: false,
+  voiceName: "",
   completed: {},
   badges: {},
   gameScores: {},
@@ -233,15 +240,16 @@ const initialState = {
 
 const app = document.querySelector("#app");
 const state = loadState();
+setDefaultVoice();
 
 function loadState() {
-  const saved = localStorage.getItem("notebookQuestState");
+  const saved = localStorage.getItem(STATE_KEY);
   if (!saved) return { ...initialState };
   return { ...initialState, ...JSON.parse(saved), answeredIndex: null, feedback: null, confetti: "", readingAloud: false, reward: null, sandboxActions: [], sandboxMistakes: 0 };
 }
 
 function saveState() {
-  localStorage.setItem("notebookQuestState", JSON.stringify({ ...state, answeredIndex: null, feedback: null, confetti: "", readingAloud: false, reward: null, sandboxActions: [], sandboxMistakes: 0 }));
+  localStorage.setItem(STATE_KEY, JSON.stringify({ ...state, answeredIndex: null, feedback: null, confetti: "", readingAloud: false, reward: null, sandboxActions: [], sandboxMistakes: 0 }));
 }
 
 function flatLessons() {
@@ -284,14 +292,15 @@ function render() {
   app.innerHTML = `
     <div class="shell">
       ${header()}
-      ${state.screen === "onboarding" ? onboarding() : ""}
-      ${state.screen === "home" ? home() : ""}
-      ${state.screen === "lesson" ? lessonView() : ""}
-      ${state.screen === "sandbox" ? sandboxView() : ""}
-      ${state.screen === "reward" ? rewardView() : ""}
-      ${state.screen === "games" ? gamesView() : ""}
-      ${state.screen === "playGame" ? playGameView() : ""}
-      ${state.screen === "profile" ? profileView() : ""}
+      ${!state.authed ? authView() : ""}
+      ${state.authed && state.screen === "onboarding" ? onboarding() : ""}
+      ${state.authed && state.screen === "home" ? home() : ""}
+      ${state.authed && state.screen === "lesson" ? lessonView() : ""}
+      ${state.authed && state.screen === "sandbox" ? sandboxView() : ""}
+      ${state.authed && state.screen === "reward" ? rewardView() : ""}
+      ${state.authed && state.screen === "games" ? gamesView() : ""}
+      ${state.authed && state.screen === "playGame" ? playGameView() : ""}
+      ${state.authed && state.screen === "profile" ? profileView() : ""}
     </div>
   `;
   bindEvents();
@@ -310,17 +319,37 @@ function header() {
         <span><strong>NotebookLM Quest</strong><small>Study buddy adventure</small></span>
       </button>
       <nav class="nav-actions" aria-label="Main navigation">
-        <button class="ghost small" data-action="games">Games</button>
-        <button class="ghost small" data-action="profile">Profile</button>
+        ${state.authed ? `<button class="ghost small" data-action="games">Games</button>
+        <button class="ghost small" data-action="profile">Profile</button>` : ""}
         <button class="icon-button" data-action="toggleMute" aria-label="${state.muted ? "Turn sound on" : "Mute sound"}">${state.muted ? "Sound Off" : "Sound On"}</button>
       </nav>
-      <div class="stats" aria-label="Game stats">
+      ${state.authed ? `<div class="stats" aria-label="Game stats">
         <span title="Hearts">Heart ${state.hearts}</span>
         <span title="Gems">Gem ${state.gems}</span>
         <span title="Streak">Streak ${state.streak}</span>
         <span title="XP">${state.xp} XP</span>
-      </div>
+      </div>` : ""}
     </header>
+  `;
+}
+
+function authView() {
+  return `
+    <main class="auth-screen">
+      <section class="auth-card brut">
+        <div>
+          <p class="eyebrow">Sign in to start fresh</p>
+          <h1>Welcome to NotebookLM Quest.</h1>
+          <p class="lede">Your old stuck game values were cleared. Sign in with Google to begin a clean adventure with full hearts.</p>
+          <button class="google-button brut-press" data-action="googleSignIn" aria-label="Continue with Google">
+            <span class="google-mark" aria-hidden="true">G</span>
+            Continue with Google
+          </button>
+          <p class="auth-note">Demo mode: this static version saves your Google-style session in this browser. A real Google OAuth client ID can be connected later.</p>
+        </div>
+        ${mascot("happy", "Fresh backpack, fresh hearts, clean start.")}
+      </section>
+    </main>
   `;
 }
 
@@ -622,10 +651,12 @@ function profileView() {
           <div><strong>${state.streak}</strong><span>Streak</span></div>
           <div><strong>${completedCount()}</strong><span>Lessons</span></div>
         </div>
+        <p><strong>Signed in:</strong> ${state.user?.name || "Google Learner"} (${state.user?.provider || "google"})</p>
         <p><strong>Role:</strong> ${state.role || "Kid / Student"} | <strong>Goal:</strong> ${state.goal || "All-around"} | <strong>Sound:</strong> ${state.muted ? "Muted" : "On"}</p>
         <div class="actions">
           <button class="ghost" data-action="toggleMute">${state.muted ? "Turn sound on" : "Mute sound"}</button>
           <button class="ghost danger-button" data-action="resetProgress">Reset progress</button>
+          <button class="ghost" data-action="signOut">Sign out</button>
           <button class="primary" data-action="home">Back to path</button>
         </div>
       </section>
@@ -671,6 +702,7 @@ function handleAction(event) {
   if (action === "games") state.screen = "games";
   if (action === "profile") state.screen = "profile";
   if (action === "toggleMute") state.muted = !state.muted;
+  if (action === "googleSignIn") googleSignIn();
   if (action === "finishOnboarding") finishOnboarding();
   if (action === "openLesson") openLesson(target.dataset.unit, target.dataset.lesson);
   if (action === "answer") answer(Number(target.dataset.index));
@@ -684,10 +716,35 @@ function handleAction(event) {
   if (action === "speak") speak(target.dataset.text);
   if (action === "playGame") playGame(target.dataset.game);
   if (action === "gameChoice") gameChoice(target.dataset.good === "true", Number(target.dataset.score));
-  if (action === "resetProgress" && confirm("Reset your NotebookLM Quest progress?")) Object.assign(state, { ...initialState });
+  if (action === "signOut") signOut();
+  if (action === "resetProgress" && confirm("Reset your NotebookLM Quest progress?")) resetProgress(true);
   state.feedback = ["home", "games", "profile", "lesson"].includes(action) ? null : state.feedback;
   saveState();
   render();
+}
+
+function googleSignIn() {
+  const name = "Google Learner";
+  resetProgress(false);
+  state.authed = true;
+  state.user = {
+    name,
+    email: "google-user@notebooklm-quest.local",
+    provider: "google"
+  };
+  state.screen = "onboarding";
+  state.feedback = null;
+}
+
+function signOut() {
+  state.authed = false;
+  state.user = null;
+  state.screen = "onboarding";
+}
+
+function resetProgress(keepAuth) {
+  const auth = keepAuth ? { authed: state.authed, user: state.user } : {};
+  Object.assign(state, { ...initialState, ...auth });
 }
 
 function finishOnboarding() {
@@ -847,10 +904,43 @@ function hasRisky(selected) {
   return selected.some((id) => ["uploadPassword", "uploadGrades"].includes(id));
 }
 
-function speak(text) {
-  if (!("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
+async function speak(text) {
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
   state.readingAloud = true;
+  saveState();
+  render();
+  const playedOpenAiVoice = await speakWithOpenAi(text);
+  if (playedOpenAiVoice) return;
+  speakWithBrowser(text);
+}
+
+async function speakWithOpenAi(text) {
+  try {
+    const response = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    if (!response.ok) return false;
+    const audio = new Audio(URL.createObjectURL(await response.blob()));
+    audio.onended = () => {
+      state.readingAloud = false;
+      saveState();
+      render();
+    };
+    audio.onerror = audio.onended;
+    await audio.play();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function speakWithBrowser(text) {
+  if (!("speechSynthesis" in window)) {
+    state.readingAloud = false;
+    return;
+  }
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "en-US";
   utterance.rate = 0.95;
@@ -866,14 +956,32 @@ function speak(text) {
   speechSynthesis.speak(utterance);
 }
 
+function setDefaultVoice() {
+  if (!("speechSynthesis" in window)) return;
+  const applyDefault = () => {
+    const voice = pickFemaleAmericanVoice();
+    if (voice && state.voiceName !== voice.name) {
+      state.voiceName = voice.name;
+      saveState();
+    }
+  };
+  applyDefault();
+  speechSynthesis.addEventListener?.("voiceschanged", applyDefault);
+  speechSynthesis.onvoiceschanged = applyDefault;
+}
+
 function pickFemaleAmericanVoice() {
   const voices = speechSynthesis.getVoices();
+  const savedVoice = voices.find((voice) => voice.name === state.voiceName && /^en[-_]us/i.test(voice.lang));
+  if (savedVoice) return savedVoice;
   const americanVoices = voices.filter((voice) => voice.lang === "en-US" || voice.lang.toLowerCase().startsWith("en-us"));
-  return americanVoices.find((voice) => /female|woman|zira|jenny|aria|samantha|victoria|karen|susan|allison|ava|joanna|kendra|kimberly|salli/i.test(voice.name))
+  const preferredVoice = americanVoices.find((voice) => /female|woman|zira|jenny|aria|samantha|victoria|karen|susan|allison|ava|joanna|kendra|kimberly|salli/i.test(voice.name))
     || americanVoices.find((voice) => !/male|man|david|mark|guy|brian|daniel|george|fred|alex/i.test(voice.name))
     || americanVoices[0]
     || voices.find((voice) => /^en[-_]us/i.test(voice.lang))
     || voices.find((voice) => /^en/i.test(voice.lang));
+  if (preferredVoice) state.voiceName = preferredVoice.name;
+  return preferredVoice;
 }
 
 function playSound(kind) {
