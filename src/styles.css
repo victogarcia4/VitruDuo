@@ -584,9 +584,38 @@ legend {
   line-height: 1.45;
 }
 
+.next-signal {
+  padding: 0.75rem;
+  margin: 0.8rem 0;
+  background: #fff7c2;
+  border: 3px solid var(--ink);
+  border-radius: 0.45rem;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.next-signal.ready {
+  background: #dfffee;
+}
+
 .step {
   color: var(--muted);
   font-weight: 900;
+}
+
+.answers button.answer-correct,
+.answers button.answer-key {
+  color: #fff;
+  background: var(--good);
+}
+
+.answers button.answer-wrong {
+  color: #fff;
+  background: var(--bad);
+}
+
+.continue-button {
+  width: 100%;
+  margin-top: 1rem;
 }
 
 .feedback {

@@ -219,6 +219,7 @@ const initialState = {
   screen: "onboarding",
   activeGame: "",
   lessonIndex: 0,
+  answeredIndex: null,
   correct: 0,
   feedback: null,
   confetti: "",
@@ -236,11 +237,11 @@ const state = loadState();
 function loadState() {
   const saved = localStorage.getItem("notebookQuestState");
   if (!saved) return { ...initialState };
-  return { ...initialState, ...JSON.parse(saved), feedback: null, confetti: "", readingAloud: false, reward: null, sandboxActions: [], sandboxMistakes: 0 };
+  return { ...initialState, ...JSON.parse(saved), answeredIndex: null, feedback: null, confetti: "", readingAloud: false, reward: null, sandboxActions: [], sandboxMistakes: 0 };
 }
 
 function saveState() {
-  localStorage.setItem("notebookQuestState", JSON.stringify({ ...state, feedback: null, confetti: "", readingAloud: false, reward: null, sandboxActions: [], sandboxMistakes: 0 }));
+  localStorage.setItem("notebookQuestState", JSON.stringify({ ...state, answeredIndex: null, feedback: null, confetti: "", readingAloud: false, reward: null, sandboxActions: [], sandboxMistakes: 0 }));
 }
 
 function flatLessons() {
@@ -427,6 +428,7 @@ function unitCard(unit, index) {
 function lessonView() {
   const lesson = currentLesson();
   const exercise = lesson.exercises[state.lessonIndex];
+  const answered = state.answeredIndex !== null;
   return `
     <main class="lesson-screen">
       <section class="lesson-card brut">
@@ -444,15 +446,33 @@ function lessonView() {
           <p class="step">Question ${state.lessonIndex + 1} of ${lesson.exercises.length}</p>
           <h2>${exercise.prompt}</h2>
           <div class="metaphor"><strong>Kid picture:</strong> ${exercise.metaphor}</div>
+          <div class="next-signal ${answered ? "ready" : ""}">
+            <strong>${answered ? "Read Novi's reason, then press Continue." : "Pick one answer to unlock the explanation."}</strong>
+          </div>
           <div class="answers">
-            ${exercise.options.map((option, index) => `<button class="brut-press" data-action="answer" data-index="${index}">${option}</button>`).join("")}
+            ${exercise.options.map((option, index) => answerButton(option, index, exercise)).join("")}
           </div>
         </div>
         ${feedback()}
+        ${answered ? `<button class="primary brut-press continue-button" data-action="continueLesson">${state.feedback?.correct ? nextLessonLabel(lesson) : "Try again"}</button>` : ""}
       </section>
       ${mascot(lessonMascotMood(), state.readingAloud ? "I am reading this in a calm American voice. Follow along like story time." : state.feedback?.text || "Choose the answer that keeps NotebookLM source-powered and safe.")}
     </main>
   `;
+}
+
+function answerButton(option, index, exercise) {
+  const answered = state.answeredIndex !== null;
+  const selected = state.answeredIndex === index;
+  const correctChoice = index === exercise.answer;
+  const classes = ["brut-press"];
+  if (answered && selected) classes.push(correctChoice ? "answer-correct" : "answer-wrong");
+  if (answered && correctChoice) classes.push("answer-key");
+  return `<button class="${classes.join(" ")}" data-action="answer" data-index="${index}" ${answered ? "disabled" : ""}>${option}</button>`;
+}
+
+function nextLessonLabel(lesson) {
+  return state.lessonIndex < lesson.exercises.length - 1 ? "Continue to next question" : "Continue to sandbox";
 }
 
 function sandboxView() {
@@ -498,6 +518,7 @@ function sandboxView() {
           <div>
             <p class="eyebrow">Next best move</p>
             <strong>${complete ? "Workflow complete" : LABELS[nextStep]}</strong>
+            <p>${complete ? "Great. Press Complete lesson to collect your reward." : "Click the matching action card on the right."}</p>
           </div>
           <div class="sandbox-actions">
             ${task.actions.map(([id, label]) => `<button class="brut-press" data-action="sandboxAction" data-step="${id}" ${selected.includes(id) ? "disabled" : ""}>${label}</button>`).join("")}
@@ -509,7 +530,7 @@ function sandboxView() {
           <span>Hint passes: ${state.hintPasses}</span>
         </div>
         ${feedback()}
-        ${complete ? `<button class="primary brut-press complete-button" data-action="completeLesson">Complete lesson</button>` : ""}
+        ${complete ? `<div class="next-signal ready"><strong>Stage reached. Press the reward button.</strong></div><button class="primary brut-press complete-button" data-action="completeLesson">Complete lesson and get rewards</button>` : ""}
       </section>
     </main>
   `;
@@ -532,6 +553,7 @@ function rewardView() {
           <div><strong>${completedWorlds()}</strong><span>World badges</span></div>
         </div>
         <p class="takeaway">${lesson.takeaway}</p>
+        <div class="next-signal ready"><strong>Best next move: continue the path, or play rewards if a game unlocked.</strong></div>
         <div class="actions">
           <button class="primary brut-press" data-action="openLesson" data-unit="${next.unit.id}" data-lesson="${next.lesson.id}">Next lesson</button>
           <button class="ghost brut-press" data-action="home">Back to path</button>
@@ -652,6 +674,7 @@ function handleAction(event) {
   if (action === "finishOnboarding") finishOnboarding();
   if (action === "openLesson") openLesson(target.dataset.unit, target.dataset.lesson);
   if (action === "answer") answer(Number(target.dataset.index));
+  if (action === "continueLesson") continueLesson();
   if (action === "lesson") state.screen = "lesson";
   if (action === "sandboxAction") sandboxAction(target.dataset.step);
   if (action === "completeLesson") completeLesson();
@@ -680,6 +703,7 @@ function openLesson(unitId, lessonId) {
   state.selectedUnit = unitId;
   state.selectedLesson = lessonId;
   state.lessonIndex = 0;
+  state.answeredIndex = null;
   state.correct = 0;
   state.feedback = null;
   state.sandboxActions = [];
@@ -688,29 +712,43 @@ function openLesson(unitId, lessonId) {
 }
 
 function answer(index) {
+  if (state.answeredIndex !== null) return;
   if (state.hearts <= 0) {
+    state.answeredIndex = index;
     state.feedback = { correct: false, title: "Heart refill needed", text: "You are out of hearts. Buy a refill with gems, then keep going.", kid: "Even heroes need snacks." };
     playSound("wrong");
     return;
   }
   const lesson = currentLesson();
   const exercise = lesson.exercises[state.lessonIndex];
+  state.answeredIndex = index;
   if (index === exercise.answer) {
     state.correct += 1;
     state.xp += 5;
     state.feedback = { correct: true, title: "Correct", text: exercise.rationale, kid: exercise.kidSummary };
     playSound("correct");
-    setTimeout(() => {
-      if (state.lessonIndex < lesson.exercises.length - 1) state.lessonIndex += 1;
-      else state.screen = "sandbox";
-      state.feedback = null;
-      saveState();
-      render();
-    }, 800);
   } else {
     state.hearts = Math.max(0, state.hearts - 1);
     state.feedback = { correct: false, title: "Tiny wobble", text: exercise.rationale, kid: exercise.kidSummary };
     playSound("wrong");
+  }
+}
+
+function continueLesson() {
+  const lesson = currentLesson();
+  if (!state.feedback?.correct) {
+    state.answeredIndex = null;
+    state.feedback = null;
+    return;
+  }
+  if (state.lessonIndex < lesson.exercises.length - 1) {
+    state.lessonIndex += 1;
+    state.answeredIndex = null;
+    state.feedback = null;
+  } else {
+    state.answeredIndex = null;
+    state.feedback = null;
+    state.screen = "sandbox";
   }
 }
 
