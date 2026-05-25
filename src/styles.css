@@ -172,6 +172,31 @@ h2 {
   gap: 0.45rem;
 }
 
+.lang-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(2.1rem, 1fr));
+  min-height: 2.3rem;
+  padding: 0.2rem;
+  font-size: 0.82rem;
+  font-weight: 950;
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.lang-toggle span {
+  display: grid;
+  min-width: 2.1rem;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.lang-toggle .active {
+  color: #fff;
+  background: var(--cobalt);
+}
+
 .stats span,
 .chip span,
 .badge-row span {
@@ -186,10 +211,53 @@ h2 {
 }
 
 .onboarding,
+.auth-screen,
 .reward-screen,
 .games-screen,
 .profile-screen {
   padding: clamp(1rem, 4vw, 3rem);
+}
+
+.auth-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: 1.25rem;
+  align-items: center;
+  max-width: 1040px;
+  padding: clamp(1rem, 4vw, 2rem);
+  margin: 0 auto;
+}
+
+.google-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 3.2rem;
+  padding: 0.75rem 1rem;
+  color: var(--ink);
+  font-weight: 950;
+  background: var(--sun);
+  border: 3px solid var(--ink);
+  border-radius: 0.5rem;
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+.google-mark {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  color: #fff;
+  background: var(--cobalt);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+.auth-note {
+  max-width: 44rem;
+  margin-top: 1rem;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .hero,
@@ -832,7 +900,8 @@ legend {
 @media (max-width: 1000px) {
   .hero,
   .dashboard,
-  .lesson-screen {
+  .lesson-screen,
+  .auth-card {
     grid-template-columns: 1fr;
   }
 
@@ -857,7 +926,14 @@ legend {
 
   .nav-actions,
   .stats {
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+    justify-content: stretch;
+  }
+
+  .nav-actions > *,
+  .stats span {
+    width: 100%;
   }
 
   .onboard-grid,
@@ -871,7 +947,8 @@ legend {
   }
 
   h1 {
-    font-size: 2.45rem;
+    max-width: 100%;
+    font-size: 2.25rem;
   }
 
   .unit {
@@ -889,14 +966,18 @@ legend {
   }
 
   .stats span,
-  .chip span {
+  .chip span,
+  .primary,
+  .ghost,
+  .back,
+  .icon-button,
+  .google-button {
     width: 100%;
   }
 
   .stats,
   .nav-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .lesson-tools,
