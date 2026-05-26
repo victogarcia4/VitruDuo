@@ -193,6 +193,7 @@ const ES = {
   "Even heroes need snacks.": "Hasta los héroes necesitan merienda.",
   "Choose the answer that keeps NotebookLM source-powered and safe.": "Elige la respuesta que mantiene a NotebookLM seguro y basado en fuentes.",
   "I am reading this in a calm American voice. Follow along like story time.": "Estoy leyendo con una voz americana tranquila. Sígueme como si fuera una historia.",
+  "I am reading this with the selected voice. Follow along like story time.": "Estoy leyendo con una voz en español. Sígueme como si fuera una historia.",
   "Fake NotebookLM sandbox": "Laboratorio falso de NotebookLM",
   "Sources": "Fuentes",
   "Secret packet": "Paquete secreto",
@@ -845,7 +846,7 @@ function lessonView() {
         ${feedback()}
         ${answered ? `<button class="primary brut-press continue-button" data-action="continueLesson">${state.feedback?.correct ? nextLessonLabel(lesson) : L("Try again")}</button>` : ""}
       </section>
-      ${mascot(lessonMascotMood(), state.readingAloud ? L("I am reading this in a calm American voice. Follow along like story time.") : L(state.feedback?.text || "Choose the answer that keeps NotebookLM source-powered and safe."))}
+      ${mascot(lessonMascotMood(), state.readingAloud ? L("I am reading this with the selected voice. Follow along like story time.") : L(state.feedback?.text || "Choose the answer that keeps NotebookLM source-powered and safe."))}
     </main>
   `;
 }
@@ -1280,7 +1281,7 @@ async function speakWithOpenAi(text) {
     const response = await fetch("/api/tts", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ text, lang: state.lang })
     });
     if (!response.ok) return false;
     const audio = new Audio(URL.createObjectURL(await response.blob()));
@@ -1303,11 +1304,11 @@ function speakWithBrowser(text) {
     return;
   }
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "en-US";
+  utterance.lang = state.lang === "es" ? "es-ES" : "en-US";
   utterance.rate = 0.95;
   utterance.pitch = 1.08;
-  const femaleUsVoice = pickFemaleAmericanVoice();
-  if (femaleUsVoice) utterance.voice = femaleUsVoice;
+  const preferredVoice = pickPreferredVoice();
+  if (preferredVoice) utterance.voice = preferredVoice;
   utterance.onend = () => {
     state.readingAloud = false;
     saveState();
@@ -1320,7 +1321,7 @@ function speakWithBrowser(text) {
 function setDefaultVoice() {
   if (!("speechSynthesis" in window)) return;
   const applyDefault = () => {
-    const voice = pickFemaleAmericanVoice();
+    const voice = pickPreferredVoice();
     if (voice && state.voiceName !== voice.name) {
       state.voiceName = voice.name;
       saveState();
@@ -1331,10 +1332,19 @@ function setDefaultVoice() {
   speechSynthesis.onvoiceschanged = applyDefault;
 }
 
-function pickFemaleAmericanVoice() {
+function pickPreferredVoice() {
   const voices = speechSynthesis.getVoices();
-  const savedVoice = voices.find((voice) => voice.name === state.voiceName && /^en[-_]us/i.test(voice.lang));
+  const langPattern = state.lang === "es" ? /^es([-_]|$)/i : /^en[-_]us/i;
+  const savedVoice = voices.find((voice) => voice.name === state.voiceName && langPattern.test(voice.lang));
   if (savedVoice) return savedVoice;
+  if (state.lang === "es") {
+    const spanishVoices = voices.filter((voice) => /^es([-_]|$)/i.test(voice.lang));
+    const preferredSpanishVoice = spanishVoices.find((voice) => /female|woman|mujer|paulina|sabina|mónica|monica|lucia|lupe|soledad|elvira|helena|laura|maria|paloma|carmen|isabela/i.test(voice.name))
+      || spanishVoices.find((voice) => !/male|man|hombre|jorge|pablo|diego|carlos|miguel|juan/i.test(voice.name))
+      || spanishVoices[0];
+    if (preferredSpanishVoice) state.voiceName = preferredSpanishVoice.name;
+    return preferredSpanishVoice;
+  }
   const americanVoices = voices.filter((voice) => voice.lang === "en-US" || voice.lang.toLowerCase().startsWith("en-us"));
   const preferredVoice = americanVoices.find((voice) => /female|woman|zira|jenny|aria|samantha|victoria|karen|susan|allison|ava|joanna|kendra|kimberly|salli/i.test(voice.name))
     || americanVoices.find((voice) => !/male|man|david|mark|guy|brian|daniel|george|fred|alex/i.test(voice.name))

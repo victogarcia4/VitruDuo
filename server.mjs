@@ -49,6 +49,7 @@ async function handleTts(request, response) {
   try {
     const body = await readJson(request);
     const input = String(body.text || "").trim().slice(0, 1800);
+    const lang = body.lang === "es" ? "es" : "en";
     if (!input) {
       sendJson(response, 400, { error: "Missing text." });
       return;
@@ -65,7 +66,9 @@ async function handleTts(request, response) {
         voice: process.env.OPENAI_TTS_VOICE || "shimmer",
         input,
         response_format: "mp3",
-        instructions: "Speak as a joyful, warm American female tutor for a 10-year-old learner. Sound bright, encouraging, clear, and playful without being overly dramatic."
+        instructions: lang === "es"
+          ? "Habla en espanol con una voz femenina, calida, alegre y clara, como una tutora amigable para un nino de 10 anos. Usa acento latinoamericano neutro, energia positiva y pronunciacion natural."
+          : "Speak as a joyful, warm American female tutor for a 10-year-old learner. Sound bright, encouraging, clear, and playful without being overly dramatic."
       })
     });
 
